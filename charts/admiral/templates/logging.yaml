@@ -1,0 +1,77 @@
+{{- if .Values.logging.useSidecar }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: raftt-fluent-bit-config
+  labels:
+    k8s-app: raftt-fluent-bit
+data:
+  fluent-bit.conf: |
+    [SERVICE]
+        Flush         1
+        Log_Level     info
+        Daemon        off
+        Parsers_File  parsers.conf
+        HTTP_Server   Off
+
+    @INCLUDE input-raftt.conf
+    @INCLUDE filters.conf
+    @INCLUDE output-opensearch.conf
+
+  input-raftt.conf: |
+    [INPUT]
+        Name              tail
+        Tag               raftt_app
+        Path              /var/log/raftt/*.log
+        Parser            json
+        DB                /var/log/flb_kube.db
+        Mem_Buf_Limit     5MB
+        Skip_Long_Lines   On
+        Refresh_Interval  10
+        Read_from_Head    True
+
+  filters.conf: |
+    [FILTER]
+        Name modify
+        Match raftt_app
+        Add cluster {{ .Values.clusterName }}
+        Add kubernetes.pod_id ${POD_ID}
+        Add kubernetes.pod_name ${POD_NAME}
+        Add kubernetes.namespace_name ${NAMESPACE_NAME}
+        Add kubernetes.host ${NODE_NAME}
+        # TODO container name, image, labels?
+
+    [FILTER]
+        Name nest
+        Match raftt_app
+        Operation nest
+        Wildcard kubernetes.*
+        Nest_under kubernetes
+        Remove_prefix kubernetes.
+
+  output-opensearch.conf: |
+    [OUTPUT]
+        Name            es
+        Match           raftt_app
+        Host            {{ .Values.logging.host }}
+        Path            {{ .Values.logging.path }}
+        Port            443
+        HTTP_User       {{ required "Must set a value for logging.username" .Values.logging.username }}
+        HTTP_Passwd     {{ required "Must set a value for logging.password" .Values.logging.password }}
+        Logstash_Format Off
+        Replace_Dots    On
+        Retry_Limit     False
+        tls             On
+        Index           logs  
+        Time_Key        logTime
+        Buffer_Size     512KB
+        Trace_Error     on
+
+  parsers.conf: |
+    [PARSER]
+        Name   json
+        Format json
+        Time_Key time
+        Time_Format %Y-%m-%dT%H:%M:%S.%f%z
+{{- end }}

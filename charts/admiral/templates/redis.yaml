@@ -1,0 +1,39 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: admiral-redis
+  labels:
+    app: admiral-redis
+spec:
+  replicas: {{ .Values.redis.replicas }}
+  selector:
+    matchLabels:
+      app: admiral-redis
+  template:
+    metadata:
+      labels:
+        app: admiral-redis
+    spec:
+      containers:
+        - name: admiral-redis
+          image: {{ .Values.redis.image }}
+          ports:
+            - containerPort: {{ .Values.redis.port }}
+              protocol: TCP
+          resources:
+            limits:
+              cpu: {{ .Values.redis.cpu_limit }}
+              memory: {{ .Values.redis.memory_limit }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: admiral-redis
+spec:
+  ports:
+    - protocol: TCP
+      port: {{ .Values.redis.port }}
+      targetPort: {{ .Values.redis.port }}
+  selector:
+    app: admiral-redis

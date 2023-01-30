@@ -1,0 +1,211 @@
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ include "registry-mirror-creds-name" . }}
+data:
+  REGISTRY_MIRROR_HOST: {{ "registry-ha.raftt.io" | b64enc }}
+  REGISTRY_MIRROR_USER: {{ .Values.registry.user | b64enc }}
+  REGISTRY_MIRROR_PASS: {{ .Values.registry.pass | b64enc }}
+---
+# IMPORTANT: if you modify anything related to logging in this file, please also modify it in admiral.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "name" . }}
+  labels:
+    app: {{ include "name" . }}
+spec:
+  replicas: {{ .Values.admiral.replicas }}
+  progressDeadlineSeconds: 500
+  minReadySeconds: 5
+  selector:
+    matchLabels:
+      app: {{ include "name" . }}
+  template:
+    metadata:
+      labels:
+        app: {{ include "name" . }}
+      {{- if .Values.logging.useSidecar }}
+      annotations:
+        fluentbit.io/exclude: "true"  # Make Fluent Bit daemonset exclude logs from this pod, since we get logs using the sidecar
+      {{- end }}
+    spec:
+      terminationGracePeriodSeconds: 300
+      serviceAccountName: {{ include "service-account-name" . }}
+      automountServiceAccountToken: true
+      {{- if ne .Values.rafttImagePullSecret "" }}
+      imagePullSecrets:
+        - name: {{ .Values.rafttImagePullSecret }}
+      {{- end }}
+      containers:
+        - name: admiral
+          image: "{{ required "Must have a value for admiral.imageRepository" .Values.admiral.imageRepository }}:{{ required "Must set a value for admiral.version" .Values.admiral.version }}"
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8080
+              scheme: HTTP
+            initialDelaySeconds: 5
+            periodSeconds: 2
+          ports:
+            - containerPort: 8080
+              protocol: TCP
+          volumeMounts:
+            - name: admiral-config
+              mountPath: /config
+            {{- if .Values.logging.useSidecar }}
+            - name: var-log-raftt
+              mountPath: /var/log/raftt
+            {{- end }}
+          env:
+            - name: REDIS_ADDR
+              value: "admiral-redis:{{ .Values.redis.port }}"
+            {{- if .Values.aws.s3BucketName }}
+            - name: S3_BUCKET_NAME
+              value: {{ .Values.aws.s3BucketName }}
+            {{- end }}
+            - name: IMAGE_REPOSITORY_NAME
+              value: {{ .Values.registry.repository }}
+            - name: CLUSTER_REACH_SECURITY_GROUP_ID
+              value: {{ .Values.aws.securityGroupId }}
+            {{- if .Values.exposeDnsSuffix }}
+            - name: EXPOSE_DNS_SUFFIX
+              value: {{ .Values.exposeDnsSuffix }}
+            {{- end }}
+            - name: WEBSOCKET_HOST
+              value: {{ mustFirst .Values.admiral.ingress.hosts }}
+            - name: CLUSTER
+              value: {{ required "Must set a value for clusterName" .Values.clusterName }}
+            - name: AWS_REGION
+              value: {{ required "Must set a value for aws.region" .Values.aws.region }}
+            - name: SANDCASTLE_DEFAULT_IMAGE_TAG
+              value: {{ .Values.admiral.version }}
+            - name: ADMIRAL_AUTH_TOKEN
+              value: {{ .Values.admiral.authToken }}
+            {{- if and (.Values.database) (ne .Values.database.host "") }}
+            - name: ENV_DB_URL
+              value: >-
+                host={{ required "Must set a value for database.host" .Values.database.host }}
+                user={{ required "Must set a value for database.user" .Values.database.user }}
+                password={{ required "Must set a value for database.password" .Values.database.password }}
+                dbname={{ required "Must set a value for database.dbname" .Values.database.dbname }}
+                port={{ required "Must set a value for database.port" .Values.database.port }}
+                sslmode={{ .Values.database.sslmode }}
+            {{- end }}
+            - name: ANALYTICS_WRITE_TOKEN # TODO: Mount as a secret
+              value: {{ .Values.admiral.segmentWriteToken }}
+            - name: INGRESS_CLASS_NAME
+              value: {{ .Values.ingressClassName }}
+            {{- range $name, $value := .Values.admiral.additionalEnvVars }}
+            - name: {{ $name }}
+              value: "{{ $value }}"
+            {{- end }}
+            - name: STORAGE_CLASS_NAME
+              value: {{ .Values.storageClassName }}
+            {{- if ne .Values.rafttImagePullSecret "" }}
+            - name: RAFTT_IMAGE_PULL_SECRET
+              value: {{ .Values.rafttImagePullSecret }}
+            {{- end }}
+            {{- if ne .Values.rafttImageRegistry "" }}
+            - name: SANDCASTLE_IMAGE_REPOSITORY
+              value: {{ .Values.sandcastle.imageRepository }}
+            {{- end }}
+          envFrom:
+            - secretRef:
+                name: {{ include "registry-mirror-creds-name" . }}
+                optional: false
+        {{- if .Values.logging.useSidecar }}
+        - name: raftt-fluent-bit
+          image: fluent/fluent-bit:2.0.8
+          imagePullPolicy: Always
+          volumeMounts:
+            - name: var-log-raftt
+              mountPath: /var/log/raftt
+            - name: raftt-fluent-bit-config
+              mountPath: /fluent-bit/etc/
+          env:
+            - name: POD_ID
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.uid
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: NAMESPACE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+        {{- end }}
+      volumes:
+        - name: admiral-config
+          configMap:
+            name: admiral-config
+        {{- if .Values.logging.useSidecar }}
+        - name: var-log-raftt
+          emptyDir:
+        - name: raftt-fluent-bit-config
+          configMap:
+            name: raftt-fluent-bit-config
+        {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name:  {{ include "name" . }}
+spec:
+  ports:
+    - protocol: TCP
+      port: 8080
+  selector:
+    app: {{ include "name" . }}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "name" . }}
+  annotations:
+    # Force admiral ingress to be reachable from everywhere
+    nginx.ingress.kubernetes.io/whitelist-source-range: "0.0.0.0/0,::/0"
+spec:
+  {{ if ne .Values.ingressClassName "" }}
+  ingressClassName: {{ .Values.ingressClassName }}
+  {{ end }}
+  rules:
+    {{ $hosts := required "Must set a value for admiral.ingress.hosts" .Values.admiral.ingress.hosts }}
+    {{- if eq (len $hosts) 0 -}}
+      {{- fail "Must set at least 1 admiral host in admiral.ingress.hosts"}}
+    {{- end }}
+    {{- range $host := $hosts }}
+    - host: {{ $host }}
+      http:
+        paths:
+          - pathType: ImplementationSpecific
+            backend:
+              service:
+                name: {{ include "name" . }}
+                port:
+                  number: 8080
+    {{- end }}
+  {{- if .Values.admiral.ingress.tls.enabled }}
+  tls:
+    - secretName: {{ required "Must have a value for the tls secret name" .Values.admiral.ingress.tls.secretName }}
+      hosts:
+        {{- range $host := .Values.admiral.ingress.hosts }}
+        - {{ $host }}
+        {{- end }}
+  {{- end }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: admiral-config
+data:
+  cpuRequest: "{{ .Values.admiral.cpuRequest }}"
+  exposePolicy: "{{ .Values.admiral.exposePolicy }}"
+  memoryRequest: "{{ .Values.admiral.memoryRequest }}"

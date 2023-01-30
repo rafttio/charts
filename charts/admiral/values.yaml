@@ -1,0 +1,60 @@
+# Default values for admiral.
+
+clusterName: ""
+exposeDnsSuffix: ""
+ingressClassName: ""
+storageClassName: ""
+rafttImagePullSecret: "" # if required, should be the name of a secret in the namespace the admiral is deployed to.
+
+redis:
+  replicas: 1
+  image: "redis:7.0.7"
+  port: 6379
+  cpu_limit: "250m"
+  memory_limit: "500Mi"
+
+# TODO: MVP-3179 should not be needed in DevX-only mode
+registry:
+  repository: ""
+  user: ""
+  pass: ""
+
+admiral:
+  replicas: 2
+  version: ""
+  authToken: "" # TODO: MVP-3181 make it non-mandatory; Admiral should tolerate not getting it, either get it from somewhere or not use it
+  additionalEnvVars: {}
+  memoryRequest: "100Mi"
+  cpuRequest: "0m"
+  exposePolicy: ""
+  imageRepository: "europe-west3-docker.pkg.dev/production-registry-374219/raftt/admiral"
+  ingress:
+    hosts: []
+    tls:
+      enabled: false
+      secretName: ""
+
+sandcastle:
+  imageRepository: "europe-west3-docker.pkg.dev/production-registry-374219/raftt/sandcastle"
+
+database:
+  host: ""
+  user: ""
+  password: ""
+  dbname: ""
+  port: ""
+  sslmode: "verify-full"
+
+# TODO: MVP-3201 AWS params should be optional
+aws:
+  region: ""
+  # (Optional) Adds client hosts authenticated to this admiral to the AWS security group with the provided id
+  securityGroupId: ""
+  s3BucketName: ""
+
+logging:
+  useSidecar: true
+  host: "logs.raftt.io"
+  path: "/opensearch"
+  username: ""
+  password: ""
