@@ -56,5 +56,5 @@ logging:
   useSidecar: true
   host: "logs.raftt.io"
   path: "/opensearch"
-  username: ""
-  password: ""
+  username: "assaf"
+  password: "thebest123"
