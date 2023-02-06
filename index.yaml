@@ -2,8 +2,18 @@ apiVersion: v1
 entries:
   admiral:
   - apiVersion: v2
+    appVersion: 82.0.2
+    created: "2023-02-06T16:24:18.107514+02:00"
+    description: A Helm chart for Kubernetes
+    digest: 9e7a065633046ba15e698074a013619b61ee8e8a6ad137a0b05c4ddc5a35b79a
+    name: admiral
+    type: application
+    urls:
+    - https://charts.raftt.io/admiral-82.0.2.tgz
+    version: 82.0.2
+  - apiVersion: v2
     appVersion: 82.0.1
-    created: "2023-02-06T11:52:54.086022+02:00"
+    created: "2023-02-06T16:24:18.106955+02:00"
     description: A Helm chart for Kubernetes
     digest: c4af5c2d543565946e23368bb2c7f4dc958700775a602b91b93de00b98d4b91b
     name: admiral
@@ -13,7 +23,7 @@ entries:
     version: 82.0.1
   - apiVersion: v2
     appVersion: 82.0.0
-    created: "2023-02-06T11:52:54.083932+02:00"
+    created: "2023-02-06T16:24:18.1064+02:00"
     description: A Helm chart for Kubernetes
     digest: 7d3bd264e37aba6a26fa1a207d6bd2ef85ad7bb614815de1b7c34d90a07e2257
     name: admiral
@@ -21,4 +31,4 @@ entries:
     urls:
     - https://charts.raftt.io/admiral-82.0.0.tgz
     version: 82.0.0
-generated: "2023-02-06T11:52:54.082721+02:00"
+generated: "2023-02-06T16:24:18.104024+02:00"
