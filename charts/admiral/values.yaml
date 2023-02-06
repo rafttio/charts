@@ -21,7 +21,7 @@ registry:
 
 admiral:
   replicas: 2
-  version: ""
+  version: "best-version-ever"
   authToken: "" # TODO: MVP-3181 make it non-mandatory; Admiral should tolerate not getting it, either get it from somewhere or not use it
   additionalEnvVars: {}
   memoryRequest: "100Mi"
